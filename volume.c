@@ -88,8 +88,8 @@ void add_triangle(double * X, double * Y, double * Z, ConvexHull ** ch, int i0, 
 	ch_new->next = NULL;
 	ConvexHull * convexhull = *ch;
 	while (convexhull->next) {
-		if (convexhull->i0 == i0 && convexhull->i1 == i1 && convexhull->i2 == i2) {
-			pop(ch, convexhull);
+		if (((convexhull->next->i0 == i0 && convexhull->next->i1 == i1) || (convexhull->next->i0 == i1 && convexhull->next->i1 == i0)) && convexhull->next->i2 == i2) {
+			pop(ch, convexhull->next);
 			free(ch_new);
 			return;
 		}
@@ -112,7 +112,7 @@ ConvexHull * new_convexhull(double * X, double * Y, double * Z, int i0, int i1, 
 	return ch;
 }
 
-int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch, int * list_points) {
+int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch, int * list_points, FILE * fp) {
 	int i;
 	
 	#ifdef DEBUG
@@ -123,7 +123,7 @@ int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull
 	#endif
 
 	int max = -1;
-	double distance_max = MIN_DISTANCE;
+	double distance_max = 0.0;
 	ConvexHull * convexhull = *ch;
 	while (convexhull) {
 		for (i = 0 ; i < nb_points ; i++) {
@@ -141,29 +141,28 @@ int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull
 		else {
 			ConvexHull * temp = convexhull;
 			convexhull = convexhull->next;
+
+			#ifdef PLOT
+			write_init(fp, temp->i0, temp->i1, temp->i2, 1);
+			#endif
+
 			pop(ch, temp);
 		}
 	}
 	return -1;
 }
 
-void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch, int index, int * list_points, double * vol) {
+void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch, int index, int * list_points, double * vol, FILE * fp) {
 	list_points[index] = 0;
-	int count_points[nb_points];
-	int i;
-	for (i = 0 ; i < nb_points ; i++) {
-		count_points[i] = 0;
-	}
 	ConvexHull * convexhull = *ch;
 	while (convexhull) {
-		if (distance_to_plan(X[index], Y[index], Z[index], convexhull->n) > MIN_DISTANCE) {
-			count_points[convexhull->i0]++;
-			count_points[convexhull->i1]++;
-			count_points[convexhull->i2]++;
-			*vol += volume_tetrahedron(X, Y, Z, convexhull->i0, convexhull->i1, convexhull->i2, index);
-			
-			#ifdef DEBUG
-			printf("%lf\n", *vol);
+		double distance = distance_to_plan(X[index], Y[index], Z[index], convexhull->n);
+		if (distance > 1e-15 && convexhull->i2 != index) {
+			double v = volume_tetrahedron(X, Y, Z, convexhull->i0, convexhull->i1, convexhull->i2, index);
+			*vol += v;
+
+			#ifdef PLOT_INSIDE
+			write(fp, convexhull->i0, convexhull->i1, convexhull->i2, index, 1);
 			#endif
 
 			add_triangle(X, Y, Z, &convexhull, convexhull->i0, convexhull->i1, index, convexhull->i2);
@@ -185,9 +184,9 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 	double max_y = Y[0], min_y = Y[0];
 	double max_z = Z[0], min_z = Z[0];
 	
-	int index_max_x = 0, index_min_x = 0, index_random0 = 0;
-	int index_max_y = 0, index_min_y = 0, index_random1 = 0;
-	int index_max_z = 0, index_min_z = 0, index_random2 = 0;
+	int index_max_x = 0, index_min_x = 0, index_random = 0;
+	int index_max_y = 0, index_min_y = 0;
+	int index_max_z = 0, index_min_z = 0;
 	for (i = 0 ; i < nb_points ; i++) {
 		if (X[i] > max_x) {
 			max_x = X[i];
@@ -197,9 +196,6 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 			min_x = X[i];
 			index_min_x = i;
 		}
-		if (X[i] > min_x && X[i] < max_x) {
-			index_random0 = i;
-		}
 		if (Y[i] > max_y) {
 			max_y = Y[i];
 			index_max_y = i;
@@ -207,9 +203,6 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 		if (Y[i] < min_y) {
 			min_y = Y[i];
 			index_min_y = i;
-		}
-		if (Y[i] > min_y && Y[i] < max_y) {
-			index_random1 = i;
 		}
 		if (Z[i] > max_z) {
 			max_z = Z[i];
@@ -219,27 +212,28 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 			min_z = Z[i];
 			index_min_z = i;
 		}
-		if (Z[i] > min_z && Z[i] < max_z) {
-			index_random2 = i;
-		}
 	}
 
-	if (index_max_x != index_min_x && index_max_x != index_random0 && index_min_x != index_random0) {
+	if (index_max_x != index_min_x) {
 		*i0 = index_max_x;
 		*i1 = index_min_x;
-		*i2 = index_random0;
 	}
-	else if (index_max_y != index_min_y && index_max_y != index_random1 && index_min_y != index_random1) {
+	else if (index_max_y != index_min_y) {
 		*i0 = index_max_y;
-		*i1 = index_min_y;
-		*i2 = index_random1;	
+		*i1 = index_min_y;	
 	}
-	else if (index_max_z != index_min_z && index_max_z != index_random2 && index_min_z != index_random2) {
+	else if (index_max_z != index_min_z) {
 		*i0 = index_max_z;
 		*i1 = index_min_z;
-		*i2 = index_random2;
 	}
-	else {
+
+	for (i = 0 ; i < nb_points ; i++) {
+		if (i != *i0 && i != *i1) {
+			*i2 = i;
+			break;
+		}
+	}
+	if (*i0 == *i1 || *i0 == *i2 || *i1 == *i2) {
 		printf("Abort: no plan\n");
 		exit(1);
 	}
@@ -274,6 +268,11 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 	#endif
 
 	*i3 = index_max;
+
+	if (*i3 == -1) {
+		printf("Abort: no plan\n");
+		exit(1);	
+	}
 }
 
 double volume(double * X, double * Y, double * Z, int nb_points) {
@@ -287,9 +286,21 @@ double volume(double * X, double * Y, double * Z, int nb_points) {
 	int i0, i1, i2, i3;
 	init(X, Y, Z, nb_points, &i0, &i1, &i2, &i3, list_points);
 
+	#ifdef PLOT
+	FILE * fp = open_file(X, Y, Z, nb_points);
+	int i = 0;
+	write_step(fp, i);
+	write_init(fp, i0, i1, i2, 0);
+	write(fp, i0, i1, i2, i3, 0);
+	#endif
+
+	#ifndef PLOT
+	FILE * fp = NULL;
+	#endif
+
 	ConvexHull * ch = new_convexhull(X, Y, Z, i0, i1, i2, i3);
 	double vol = volume_tetrahedron(X, Y, Z, i0, i1, i2, i3);
-	int index = farthest_point(X, Y, Z, nb_points, &ch, list_points);
+	int index = farthest_point(X, Y, Z, nb_points, &ch, list_points, fp);
 	
 	#ifdef DEBUG
 	print_convexhull(ch);
@@ -300,13 +311,25 @@ double volume(double * X, double * Y, double * Z, int nb_points) {
 		printf("adding %d ...\n", index);
 		#endif
 
-		expand(X, Y, Z, nb_points, &ch, index, list_points, &vol);
+		#ifdef PLOT
+		i++;
+		write_step(fp, i);
+		// if (i == 200)
+			// break;
+		#endif
+
+		expand(X, Y, Z, nb_points, &ch, index, list_points, &vol, fp);
 		
 		#ifdef DEBUG
 		print_convexhull(ch);
 		#endif
 
-		index = farthest_point(X, Y, Z, nb_points, &ch, list_points);
+		index = farthest_point(X, Y, Z, nb_points, &ch, list_points, fp);
 	}
+
+	#ifdef PLOT
+	close_file(fp);
+	#endif
+
 	return vol;
 }
