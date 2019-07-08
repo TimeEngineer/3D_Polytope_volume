@@ -5,7 +5,7 @@
 #define NB_POINTS_CUBE 8
 #define NB_POINTS_FIGURE1 12
 
-#define NB_POINTS_FIGURE2 50
+#define NB_POINTS_FIGURE2 30
 
 int main() {
 	time_t t;
@@ -37,7 +37,6 @@ int main() {
 	}
 	double vol2 = volume(X2, Y2, Z2, NB_POINTS_FIGURE2);
 	printf("volume = %lf\n", vol2);
-
 
 	return 0;
 }

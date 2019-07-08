@@ -3,9 +3,11 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 #define MIN_DISTANCE 1e-15
 #define DEBUG
+#define PRINT
 
 typedef struct ConvexHull {
 	int i0;

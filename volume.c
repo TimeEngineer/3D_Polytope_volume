@@ -65,34 +65,6 @@ double distance_to_plan(double x, double y, double z, double * n) {
 	return n[0] * x + n[1] * y + n[2] * z + n[3];
 }
 
-void add_triangle(double * X, double * Y, double * Z, ConvexHull * ch, int i0, int i1, int i2, int i3) {
-	ConvexHull * ch_new = (ConvexHull *) malloc(sizeof(ConvexHull));
-	ch_new->i0 = i0;
-	ch_new->i1 = i1;
-	ch_new->i2 = i2;
-	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch_new->n);
-	ch_new->next = NULL;
-	ConvexHull * convexhull = ch;
-	while (convexhull->next) {
-		convexhull = convexhull->next;
-	}
-	convexhull->next = ch_new;
-}
-
-ConvexHull * new_convexhull(double * X, double * Y, double * Z, int i0, int i1, int i2, int i3) {
-	ConvexHull * ch = (ConvexHull *) malloc(sizeof(ConvexHull));
-	ch->i0 = i0;
-	ch->i1 = i1;
-	ch->i2 = i2;
-	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch->n);
-	ch->next = NULL;
-	/* Minimal convex hull is tetrahedron */
-	add_triangle(X, Y, Z, ch, i0, i1, i3, i2);
-	add_triangle(X, Y, Z, ch, i0, i2, i3, i1);
-	add_triangle(X, Y, Z, ch, i1, i2, i3, i0);
-	return ch;
-}
-
 void pop(ConvexHull ** ch, ConvexHull * old) {
 	if (*ch == old) {
 		*ch = old->next;
@@ -107,6 +79,39 @@ void pop(ConvexHull ** ch, ConvexHull * old) {
 	free(old);
 }
 
+void add_triangle(double * X, double * Y, double * Z, ConvexHull ** ch, int i0, int i1, int i2, int i3) {
+	ConvexHull * ch_new = (ConvexHull *) malloc(sizeof(ConvexHull));
+	ch_new->i0 = i0;
+	ch_new->i1 = i1;
+	ch_new->i2 = i2;
+	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch_new->n);
+	ch_new->next = NULL;
+	ConvexHull * convexhull = *ch;
+	while (convexhull->next) {
+		if (convexhull->i0 == i0 && convexhull->i1 == i1 && convexhull->i2 == i2) {
+			pop(ch, convexhull);
+			free(ch_new);
+			return;
+		}
+		convexhull = convexhull->next;
+	}
+	convexhull->next = ch_new;
+}
+
+ConvexHull * new_convexhull(double * X, double * Y, double * Z, int i0, int i1, int i2, int i3) {
+	ConvexHull * ch = (ConvexHull *) malloc(sizeof(ConvexHull));
+	ch->i0 = i0;
+	ch->i1 = i1;
+	ch->i2 = i2;
+	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch->n);
+	ch->next = NULL;
+	/* Minimal convex hull is tetrahedron */
+	add_triangle(X, Y, Z, &ch, i0, i1, i3, i2);
+	add_triangle(X, Y, Z, &ch, i0, i2, i3, i1);
+	add_triangle(X, Y, Z, &ch, i1, i2, i3, i0);
+	return ch;
+}
+
 int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch, int * list_points) {
 	int i;
 	
@@ -118,7 +123,7 @@ int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull
 	#endif
 
 	int max = -1;
-	double distance_max = 0.0;
+	double distance_max = MIN_DISTANCE;
 	ConvexHull * convexhull = *ch;
 	while (convexhull) {
 		for (i = 0 ; i < nb_points ; i++) {
@@ -160,25 +165,10 @@ void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch,
 			#ifdef DEBUG
 			printf("%lf\n", *vol);
 			#endif
-		}
-		convexhull = convexhull->next;
-	}
 
-	convexhull = *ch;
-	while (convexhull) {
-		if (distance_to_plan(X[index], Y[index], Z[index], convexhull->n) > MIN_DISTANCE) {
-			if (count_points[convexhull->i0] < 2 || count_points[convexhull->i1] < 2) {
-				add_triangle(X, Y, Z, convexhull, convexhull->i0, convexhull->i1, index, convexhull->i2);
-				printf("triangle %d %d %d created\n", convexhull->i0, convexhull->i1, index);
-			}
-			if (count_points[convexhull->i0] < 2 || count_points[convexhull->i2] < 2) {
-				add_triangle(X, Y, Z, convexhull, convexhull->i0, convexhull->i2, index, convexhull->i1);
-				printf("triangle %d %d %d created\n", convexhull->i0, convexhull->i2, index);
-			}
-			if (count_points[convexhull->i1] < 2 || count_points[convexhull->i2] < 2) {
-				add_triangle(X, Y, Z, convexhull, convexhull->i1, convexhull->i2, index, convexhull->i0);
-				printf("triangle %d %d %d created\n", convexhull->i1, convexhull->i2, index);
-			}
+			add_triangle(X, Y, Z, &convexhull, convexhull->i0, convexhull->i1, index, convexhull->i2);
+			add_triangle(X, Y, Z, &convexhull, convexhull->i0, convexhull->i2, index, convexhull->i1);
+			add_triangle(X, Y, Z, &convexhull, convexhull->i1, convexhull->i2, index, convexhull->i0);
 			ConvexHull * temp = convexhull;
 			convexhull = convexhull->next;
 			pop(ch, temp);
@@ -195,56 +185,56 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 	double max_y = Y[0], min_y = Y[0];
 	double max_z = Z[0], min_z = Z[0];
 	
-	int index_max_x = 0, index_min_x = 0, index_random0 = -1;
-	int index_max_y = 0, index_min_y = 0, index_random1 = -1;
-	int index_max_z = 0, index_min_z = 0, index_random2 = -1;
+	int index_max_x = 0, index_min_x = 0, index_random0 = 0;
+	int index_max_y = 0, index_min_y = 0, index_random1 = 0;
+	int index_max_z = 0, index_min_z = 0, index_random2 = 0;
 	for (i = 0 ; i < nb_points ; i++) {
 		if (X[i] > max_x) {
 			max_x = X[i];
 			index_max_x = i;
 		}
-		else if (X[i] < min_x) {
+		if (X[i] < min_x) {
 			min_x = X[i];
 			index_min_x = i;
 		}
-		else {
+		if (X[i] > min_x && X[i] < max_x) {
 			index_random0 = i;
 		}
 		if (Y[i] > max_y) {
 			max_y = Y[i];
 			index_max_y = i;
 		}
-		else if (Y[i] < min_y) {
+		if (Y[i] < min_y) {
 			min_y = Y[i];
 			index_min_y = i;
 		}
-		else {
+		if (Y[i] > min_y && Y[i] < max_y) {
 			index_random1 = i;
 		}
 		if (Z[i] > max_z) {
 			max_z = Z[i];
 			index_max_z = i;
 		}
-		else if (Z[i] < min_z) {
+		if (Z[i] < min_z) {
 			min_z = Z[i];
 			index_min_z = i;
 		}
-		else {
+		if (Z[i] > min_z && Z[i] < max_z) {
 			index_random2 = i;
 		}
 	}
 
-	if (index_max_x != index_min_x) {
+	if (index_max_x != index_min_x && index_max_x != index_random0 && index_min_x != index_random0) {
 		*i0 = index_max_x;
 		*i1 = index_min_x;
-		*i2 = index_random0;	
+		*i2 = index_random0;
 	}
-	else if (index_max_y != index_min_y) {
+	else if (index_max_y != index_min_y && index_max_y != index_random1 && index_min_y != index_random1) {
 		*i0 = index_max_y;
 		*i1 = index_min_y;
 		*i2 = index_random1;	
 	}
-	else if (index_max_z != index_min_z) {
+	else if (index_max_z != index_min_z && index_max_z != index_random2 && index_min_z != index_random2) {
 		*i0 = index_max_z;
 		*i1 = index_min_z;
 		*i2 = index_random2;
@@ -276,7 +266,7 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 
 	list_points[index_max] = 0;
 
-	#ifdef DEBUG
+	#ifdef PRINT
 	printf("max_x = %.2lf min_x = %.2lf\n", max_x, min_x);
 	printf("max_y = %.2lf min_y = %.2lf\n", max_y, min_y);
 	printf("max_z = %.2lf min_z = %.2lf\n", max_z, min_z);
