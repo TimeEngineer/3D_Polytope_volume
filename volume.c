@@ -180,7 +180,7 @@ void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch,
 			double v = volume_tetrahedron(X, Y, Z, convexhull->i0, convexhull->i1, convexhull->i2, index);
 			*vol += v;
 
-			#ifdef PLOT_INSIDE
+			#ifdef INSIDE
 			write(fp, convexhull->i0, convexhull->i1, convexhull->i2, index, 1);
 			#endif
 

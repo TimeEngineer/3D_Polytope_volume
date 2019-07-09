@@ -9,7 +9,7 @@
 // #define DEBUG
 // #define PRINT
 // #define PLOT
-// #define PLOT_INSIDE
+// #define INSIDE
 
 typedef struct ConvexHull {
 	int i0;
