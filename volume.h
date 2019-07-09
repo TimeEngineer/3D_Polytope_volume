@@ -3,12 +3,13 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include "io.h"
 
 // #define DEBUG
-#define PRINT
-#define PLOT
-#define PLOT_INSIDE
+// #define PRINT
+// #define PLOT
+// #define PLOT_INSIDE
 
 typedef struct ConvexHull {
 	int i0;

@@ -28,12 +28,14 @@ void plan(double * X, double * Y, double * Z, int i0, int i1, int i2, double * n
 /* build plan with normal n oriented in the opposite direction of i3 */
 void oriented_plan(double * X, double * Y, double * Z, int i0, int i1, int i2, int i3, double * n) {
 	plan(X, Y, Z, i0, i1, i2, n);
-	double _dot = n[0] * (X[i0] - X[i3]) + n[1] * (Y[i0] - Y[i3]) + n[2] * (Z[i0] - Z[i3]);
-	double _sign = (_dot < 0 ? -_dot : _dot)/_dot;
-	n[0] *= _sign;
-	n[1] *= _sign;
-	n[2] *= _sign;
-	n[3] *= _sign;
+	double _a0 = X[i0] - X[i3];
+	double _a1 = Y[i0] - Y[i3];
+	double _a2 = Z[i0] - Z[i3];
+	double _dot = n[0] * _a0 + n[1] * _a1 + n[2] * _a2;
+	n[0] *= _dot;
+	n[1] *= _dot;
+	n[2] *= _dot;
+	n[3] *= _dot;
 }
 
 /* _a0 _b0 _c0 */
@@ -65,6 +67,7 @@ double distance_to_plan(double x, double y, double z, double * n) {
 	return n[0] * x + n[1] * y + n[2] * z + n[3];
 }
 
+/* pop a triangle from the convex hull */
 void pop(ConvexHull ** ch, ConvexHull * old) {
 	if (*ch == old) {
 		*ch = old->next;
@@ -79,25 +82,30 @@ void pop(ConvexHull ** ch, ConvexHull * old) {
 	free(old);
 }
 
+/* add a triangle to the convex hull */
 void add_triangle(double * X, double * Y, double * Z, ConvexHull ** ch, int i0, int i1, int i2, int i3) {
+	/* find the back of the convex hull */
+	ConvexHull * convexhull = *ch;
+	while (convexhull->next) {
+		/* convex hull can't have twice the same triangle, this is an intersection, pop it ! */
+		if (((convexhull->next->i0 == i0 && convexhull->next->i1 == i1) || (convexhull->next->i0 == i1 && convexhull->next->i1 == i0)) && convexhull->next->i2 == i2) {
+			pop(ch, convexhull->next);
+			return;
+		}
+		convexhull = convexhull->next;
+	}
+	/* build the new triangle */
 	ConvexHull * ch_new = (ConvexHull *) malloc(sizeof(ConvexHull));
 	ch_new->i0 = i0;
 	ch_new->i1 = i1;
 	ch_new->i2 = i2;
 	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch_new->n);
 	ch_new->next = NULL;
-	ConvexHull * convexhull = *ch;
-	while (convexhull->next) {
-		if (((convexhull->next->i0 == i0 && convexhull->next->i1 == i1) || (convexhull->next->i0 == i1 && convexhull->next->i1 == i0)) && convexhull->next->i2 == i2) {
-			pop(ch, convexhull->next);
-			free(ch_new);
-			return;
-		}
-		convexhull = convexhull->next;
-	}
+	/* link the new triangle */
 	convexhull->next = ch_new;
 }
 
+/* build a tetrahedron */
 ConvexHull * new_convexhull(double * X, double * Y, double * Z, int i0, int i1, int i2, int i3) {
 	ConvexHull * ch = (ConvexHull *) malloc(sizeof(ConvexHull));
 	ch->i0 = i0;
@@ -105,13 +113,14 @@ ConvexHull * new_convexhull(double * X, double * Y, double * Z, int i0, int i1, 
 	ch->i2 = i2;
 	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch->n);
 	ch->next = NULL;
-	/* Minimal convex hull is tetrahedron */
+	/* minimal convex hull is tetrahedron */
 	add_triangle(X, Y, Z, &ch, i0, i1, i3, i2);
 	add_triangle(X, Y, Z, &ch, i0, i2, i3, i1);
 	add_triangle(X, Y, Z, &ch, i1, i2, i3, i0);
 	return ch;
 }
 
+/* find the farthest point upper the first triangle */
 int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch, int * list_points, FILE * fp) {
 	int i;
 	
@@ -124,20 +133,25 @@ int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull
 
 	int max = -1;
 	double distance_max = 0.0;
+	/* iterate over all surface of the convex hull */
 	ConvexHull * convexhull = *ch;
 	while (convexhull) {
 		for (i = 0 ; i < nb_points ; i++) {
+			/* check if the point is not used */
 			if (list_points[i]) {
 				double distance = distance_to_plan(X[i], Y[i], Z[i], convexhull->n);
+				/* check if the distance is greater than the max */
 				if (distance > distance_max) {
 					distance_max = distance;
 					max = i;
 				}
 			}
 		}
+		/* check if a maximum is found for this triangle */
 		if (max != -1) {
 			return max;	
 		}
+		/* else there is no point on this side, pop this triangle for performance */
 		else {
 			ConvexHull * temp = convexhull;
 			convexhull = convexhull->next;
@@ -152,12 +166,17 @@ int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull
 	return -1;
 }
 
+/* try to expand the convex hull with a point */
 void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch, int index, int * list_points, double * vol, FILE * fp) {
+	/* mark this point as used */
 	list_points[index] = 0;
+	/* iterate over triangles to merge a larger convex hull */
 	ConvexHull * convexhull = *ch;
 	while (convexhull) {
 		double distance = distance_to_plan(X[index], Y[index], Z[index], convexhull->n);
+		/* 1e-15 is a threshold to avoid imprecision */
 		if (distance > 1e-15 && convexhull->i2 != index) {
+			/* sum the volume of the created tetrahedron */
 			double v = volume_tetrahedron(X, Y, Z, convexhull->i0, convexhull->i1, convexhull->i2, index);
 			*vol += v;
 
@@ -165,9 +184,12 @@ void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch,
 			write(fp, convexhull->i0, convexhull->i1, convexhull->i2, index, 1);
 			#endif
 
+			/* build the new tetrahedron */
 			add_triangle(X, Y, Z, &convexhull, convexhull->i0, convexhull->i1, index, convexhull->i2);
 			add_triangle(X, Y, Z, &convexhull, convexhull->i0, convexhull->i2, index, convexhull->i1);
 			add_triangle(X, Y, Z, &convexhull, convexhull->i1, convexhull->i2, index, convexhull->i0);
+			
+			/* pop the used triangle */
 			ConvexHull * temp = convexhull;
 			convexhull = convexhull->next;
 			pop(ch, temp);
@@ -178,15 +200,17 @@ void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch,
 	}
 }
 
+/* initialize 4 points for our first tetrahedron */
 void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1, int * i2, int * i3, int * list_points) {
 	int i;
 	double max_x = X[0], min_x = X[0];
 	double max_y = Y[0], min_y = Y[0];
 	double max_z = Z[0], min_z = Z[0];
-	
-	int index_max_x = 0, index_min_x = 0, index_random = 0;
+
+	int index_max_x = 0, index_min_x = 0;
 	int index_max_y = 0, index_min_y = 0;
 	int index_max_z = 0, index_min_z = 0;
+	
 	for (i = 0 ; i < nb_points ; i++) {
 		if (X[i] > max_x) {
 			max_x = X[i];
@@ -275,6 +299,7 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 	}
 }
 
+/* find the volume of a polytope described by a cloud of points */
 double volume(double * X, double * Y, double * Z, int nb_points) {
 	/* 4 points are needed to get a 3D convex hull */
 	if (nb_points < 4) {
@@ -298,6 +323,7 @@ double volume(double * X, double * Y, double * Z, int nb_points) {
 	FILE * fp = NULL;
 	#endif
 
+	/* initialize the first tetrahedron */
 	ConvexHull * ch = new_convexhull(X, Y, Z, i0, i1, i2, i3);
 	double vol = volume_tetrahedron(X, Y, Z, i0, i1, i2, i3);
 	int index = farthest_point(X, Y, Z, nb_points, &ch, list_points, fp);
@@ -306,6 +332,7 @@ double volume(double * X, double * Y, double * Z, int nb_points) {
 	print_convexhull(ch);
 	#endif
 
+	/* while it is growable */
 	while (index != -1) {
 		#ifdef DEBUG
 		printf("adding %d ...\n", index);
@@ -314,10 +341,9 @@ double volume(double * X, double * Y, double * Z, int nb_points) {
 		#ifdef PLOT
 		i++;
 		write_step(fp, i);
-		// if (i == 200)
-			// break;
 		#endif
 
+		/* expand the convex hull */
 		expand(X, Y, Z, nb_points, &ch, index, list_points, &vol, fp);
 		
 		#ifdef DEBUG
