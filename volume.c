@@ -8,8 +8,8 @@ void print_convexhull(ConvexHull * ch) {
 	} printf("\n");
 }
 
-/* build plan with normal n with 3 points */
-void plan(double * X, double * Y, double * Z, int i0, int i1, int i2, double * n) {
+/* build plane with normal n with 3 points */
+void plane(double * X, double * Y, double * Z, int i0, int i1, int i2, double * n) {
 	/* vectors */
 	double _a0 = X[i1] - X[i0];
 	double _a1 = Y[i1] - Y[i0];
@@ -21,13 +21,13 @@ void plan(double * X, double * Y, double * Z, int i0, int i1, int i2, double * n
 	n[0] = _a1 * _b2 - _a2 * _b1; // a
 	n[1] = _a2 * _b0 - _a0 * _b2; // b
 	n[2] = _a0 * _b1 - _a1 * _b0; // c
-	/* equation of plan: ax + by + cz + d = 0 */
+	/* equation of plane: ax + by + cz + d = 0 */
 	n[3] = - n[0] * X[i0] - n[1] * Y[i0] - n[2] * Z[i0]; // d
 }
 
-/* build plan with normal n oriented in the opposite direction of i3 */
-void oriented_plan(double * X, double * Y, double * Z, int i0, int i1, int i2, int i3, double * n) {
-	plan(X, Y, Z, i0, i1, i2, n);
+/* build plane with normal n oriented in the opposite direction of i3 */
+void oriented_plane(double * X, double * Y, double * Z, int i0, int i1, int i2, int i3, double * n) {
+	plane(X, Y, Z, i0, i1, i2, n);
 	double _a0 = X[i0] - X[i3];
 	double _a1 = Y[i0] - Y[i3];
 	double _a2 = Z[i0] - Z[i3];
@@ -63,7 +63,7 @@ double volume_tetrahedron(double * X, double * Y, double * Z, int i0, int i1, in
 	return (_det < 0 ? -_det : _det)/6.0;
 }
 
-double distance_to_plan(double x, double y, double z, double * n) {
+double distance_to_plane(double x, double y, double z, double * n) {
 	return n[0] * x + n[1] * y + n[2] * z + n[3];
 }
 
@@ -99,7 +99,7 @@ void add_triangle(double * X, double * Y, double * Z, ConvexHull ** ch, int i0, 
 	ch_new->i0 = i0;
 	ch_new->i1 = i1;
 	ch_new->i2 = i2;
-	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch_new->n);
+	oriented_plane(X, Y, Z, i0, i1, i2, i3, ch_new->n);
 	ch_new->next = NULL;
 	/* link the new triangle */
 	convexhull->next = ch_new;
@@ -111,7 +111,7 @@ ConvexHull * new_convexhull(double * X, double * Y, double * Z, int i0, int i1, 
 	ch->i0 = i0;
 	ch->i1 = i1;
 	ch->i2 = i2;
-	oriented_plan(X, Y, Z, i0, i1, i2, i3, ch->n);
+	oriented_plane(X, Y, Z, i0, i1, i2, i3, ch->n);
 	ch->next = NULL;
 	/* minimal convex hull is tetrahedron */
 	add_triangle(X, Y, Z, &ch, i0, i1, i3, i2);
@@ -139,7 +139,7 @@ int farthest_point(double * X, double * Y, double * Z, int nb_points, ConvexHull
 		for (i = 0 ; i < nb_points ; i++) {
 			/* check if the point is not used */
 			if (list_points[i]) {
-				double distance = distance_to_plan(X[i], Y[i], Z[i], convexhull->n);
+				double distance = distance_to_plane(X[i], Y[i], Z[i], convexhull->n);
 				/* check if the distance is greater than the max */
 				if (distance > distance_max) {
 					distance_max = distance;
@@ -173,7 +173,7 @@ void expand(double * X, double * Y, double * Z, int nb_points, ConvexHull ** ch,
 	/* iterate over triangles to merge a larger convex hull */
 	ConvexHull * convexhull = *ch;
 	while (convexhull) {
-		double distance = distance_to_plan(X[index], Y[index], Z[index], convexhull->n);
+		double distance = distance_to_plane(X[index], Y[index], Z[index], convexhull->n);
 		/* 1e-15 is a threshold to avoid imprecision */
 		if (distance > 1e-15 && convexhull->i2 != index) {
 			/* sum the volume of the created tetrahedron */
@@ -258,19 +258,19 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 		}
 	}
 	if (*i0 == *i1 || *i0 == *i2 || *i1 == *i2) {
-		printf("Abort: no plan\n");
+		printf("Abort: no plane\n");
 		exit(1);
 	}
 
 	double n[4];
-	plan(X, Y, Z, *i0, *i1, *i2, n);
+	plane(X, Y, Z, *i0, *i1, *i2, n);
 
 	double distance_max = -1.0;
 	int index_max = -1;
 	for (i = 0 ; i < nb_points ; i++) {
 		if (i != *i0 && i != *i1 && i != *i2) {
 			list_points[i] = 1;
-			double distance = distance_to_plan(X[i], Y[i], Z[i], n);
+			double distance = distance_to_plane(X[i], Y[i], Z[i], n);
 			distance = distance < 0 ? -distance : distance;
 			if (distance > distance_max) {
 				distance_max = distance;
@@ -294,7 +294,7 @@ void init(double * X, double * Y, double * Z, int nb_points, int * i0, int * i1,
 	*i3 = index_max;
 
 	if (*i3 == -1) {
-		printf("Abort: no plan\n");
+		printf("Abort: no volume\n");
 		exit(1);	
 	}
 }

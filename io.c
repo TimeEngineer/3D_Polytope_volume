@@ -35,7 +35,7 @@ FILE * open_file(double * X, double * Y, double * Z, int nb_points) {
 		}
 	} fputs(" ]\n", fp);
 
-	// fputs("\nax.scatter(X, Y, Z, marker='o')\n\n", fp);
+	fputs("\nax.scatter(X, Y, Z, marker='o')\n\n", fp);
 	
 	return fp;
 }
